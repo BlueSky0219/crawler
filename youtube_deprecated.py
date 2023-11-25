@@ -4,7 +4,6 @@ from tqdm import tqdm
 import json
 import os
 import shutil
-from yt_dlp import YoutubeDL
 
 
 class DownloadYoutubeResource:
