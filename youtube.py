@@ -1,9 +1,5 @@
-import requests
-import re
-import json
 import os
 from yt_dlp import YoutubeDL
-import webvtt
 
 
 class DownloadYoutubeResource:
@@ -14,28 +10,22 @@ class DownloadYoutubeResource:
                           'Chrome/119.0.0.0 Safari/537.36'
         }
 
+        self.title = self.get_video_title()
         url_id = url.split('?')[1].split('=')[1].split('&')[0]
         self.image_url = f'https://i.ytimg.com/vi/{url_id}/hqdefault.jpg'
 
         print("正在解析中...")
 
-        html_data = requests.get(url=url, headers=self.headers).text
-        json_str = re.findall('var ytInitialPlayerResponse = (.*?);var', html_data)[0]
-        json_dict = json.loads(json_str)
-        title = json_dict['videoDetails']['title']
+    def get_video_title(self):
+        ydl = YoutubeDL({'quiet': True})
 
-        self.captions = json_dict['captions']['playerCaptionsTracklistRenderer']['captionTracks']
-
-        ffmpeg_title = re.sub('[/:*?"<>|\\n]', '', title)
-        ffmpeg_title = ffmpeg_title.replace(' ', '')
-
-        self.video_audio_dict = json_dict['streamingData']['adaptiveFormats']
-        # self.json_dict = json_dict
-        self.title = title
-        self.ffmpeg_title = ffmpeg_title
+        with ydl:
+            result = ydl.extract_info(self.url, download=False)
+            title = result.get('title', 'Title not available')
+            return title
 
     def getImage(self):
-        output_path = 'E:/store/resource/media/videos/'
+        output_path = 'F:/store/resource/media/images/'
         ydl_opts = {'outtmpl': output_path + '/%(title)s',
                     'format': 'best',
                     'writethumbnail': True,
@@ -44,17 +34,30 @@ class DownloadYoutubeResource:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.extract_info(self.url, download=True)
 
-    def extract_subtitles(self, name):
-        path = 'E:/store/resource/media/videos/' + name
-        subtitles = []
-        try:
-            captions = webvtt.read(path)
-            for caption in captions:
-                subtitles.append(caption.text.strip())
-        except Exception as e:
-            print(f"Error reading subtitles: {e}")
+    def processSubtitles(self, mode=1):
+        suffer = 'en'
+        if mode == 2:
+            suffer = 'zh-Hans'
+        output_path = 'f:/store/resource/media/subtitles/'
+        vtt_to_srt = f'ffmpeg -i {output_path}temp.{suffer}.vtt {output_path}temp.{suffer}.srt'
+        os.system(vtt_to_srt)
+        old_name = f'{output_path}temp.{suffer}.srt'
+        new_name = f'{output_path}{self.title}.{suffer}.srt'
+        os.rename(old_name, new_name)
+        os.remove(f'{output_path}temp.{suffer}.vtt')
 
-        return subtitles
+    def getSubtitles(self):
+        if self.check_subtitles('en', 1):
+            self.download_subtitles('en', 1)
+        elif self.check_subtitles('en', 2):
+            self.download_subtitles('en', 2)
+        if self.check_subtitles('zh-Hans', 1):
+            self.download_subtitles('zh-Hans', 1)
+        elif self.check_subtitles('zh-Hans', 2):
+            self.download_subtitles('zh-Hans', 2)
+
+        self.processSubtitles(1)
+        self.processSubtitles(2)
 
     def check_subtitles(self, language='en', mode=1):
         # mode为1检查外挂字幕
@@ -64,8 +67,9 @@ class DownloadYoutubeResource:
             sub = 'automatic_captions'
 
         ydl_opts = {
-            'listsubtitles': True,
             'skip_download': True,
+            'quiet': True,
+            'convertSubs': 'srt',
         }
 
         with YoutubeDL(ydl_opts) as ydl:
@@ -78,7 +82,7 @@ class DownloadYoutubeResource:
                 return False
 
     def download_subtitles(self, language='en', mode=1):
-        output_path = 'E:/store/resource/media/videos/'
+        output_path = 'F:/store/resource/media/subtitles/'
         # mode为1下载外挂字幕
         sub_flag = True
         sub_autp_flag = False
@@ -88,21 +92,12 @@ class DownloadYoutubeResource:
             sub_autp_flag = True
 
         ydl_opts = {
-            'outtmpl': output_path + '/%(title)s',
+            'outtmpl': output_path + '/temp',
             'writesubtitles': sub_flag,
             'writeautomaticsub': sub_autp_flag,
             'subtitleslangs': [language],
             'skip_download': True,
-        }
-
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([self.url])
-
-    def download_best(self):
-        output_path = 'E:/store/resource/media/videos/'
-        ydl_opts = {
-            'format': 'bestvideo+bestaudio/best',
-            'outtmpl': f'{output_path}/%(title)s.mp4',
+            'quiet': True,
         }
 
         with YoutubeDL(ydl_opts) as ydl:
@@ -133,100 +128,94 @@ class DownloadYoutubeResource:
 
             return sorted(set(target_formats), reverse=True)
 
+    def processFile(self):
+        output_path = 'f:/store/resource/media/videos/'
+        webm_to_mp4 = f'ffmpeg -i {output_path}temp.webm {output_path}temp.mp4'
+        os.system(webm_to_mp4)
+        old_name = f'{output_path}temp.mp4'
+        new_name = f'{output_path}{self.title}.mp4'
+        os.rename(old_name, new_name)
+        os.remove(f'{output_path}temp.webm')
+
     def download_video(self, quality='best'):
-        output_path = 'E:/store/resource/media/videos/'
+        output_path = 'f:/store/resource/media/videos/'
+        yt_format = f'bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/bestvideo[ext=mp4]+bestaudio/best[ext=m4a]/best[ext=webm]'
+        if quality == 'best':
+            yt_format = 'bestvideo+bestaudio/best[ext=mp4]+bestaudio/best[ext=m4a]/best[ext=webm]'
         options = {
-            'format': f'bestvideo[height<={quality}]+bestaudio/best[height<={quality}]',
-            'outtmpl': f'{output_path}/%(title)s.mp4',
+            'format': yt_format,
+            'outtmpl': f'{output_path}/temp.%(ext)s',
         }
 
         with YoutubeDL(options) as ydl:
             ydl.download([self.url])
 
+        print('视频格式转换中...')
+        self.processFile()
+
 
 def ui():
-    video_suffix = '.mp4'
-    audio_suffix = '.mp3'
     print('Welcome to YouTubeSky v1.0')
     # https://www.youtube.com/watch?v=2b7GY4BSUmU
-    # url = input('请输入下载地址: ')
-    url = 'https://www.youtube.com/watch?v=sVPLeZ_Vpw8'
+    url = input('请输入下载地址: ')
+    # url = 'https://www.youtube.com/watch?v=sVPLeZ_Vpw8'
     resource = DownloadYoutubeResource(url)
     print('请选择需要下载的内容(回车默认最高清晰度完整下载)')
     mode = input('1: 完整下载 2: 选择下载: \n')
     if mode == '':
-        resource.download_best()
-        resource.getEnglishCaption()
+        print('下载视频中...')
+        resource.download_video('best')
+        print('下载中英文字幕中...')
+        resource.getSubtitles()
         resource.getImage()
     elif mode == '1':
-        # index = 1
-        # quality_list = resource.getQualityList()
-        # print('请选择清晰度')
-        # for quality in quality_list:
-        #     print(f'{index}: {quality}p', end='  ')
-        #     index += 1
-        # print()
-        # quality = int(input())
-        # if -1 < quality <= len(quality_list):
-        #     print('下载视频中...')
-        #     resource.download_video(quality_list[quality - 1])
-        # else:
-        #     print('输入错误，请重新运行！')
-        #     return
-        #
-        # print('下载中英文字幕中...')
-        # if resource.check_subtitles('en', 1):
-        #     resource.download_subtitles('en', 1)
-        # elif resource.check_subtitles('en', 2):
-        #     resource.download_subtitles('en', 2)
-        # if resource.check_subtitles('zh-Hans', 1):
-        #     resource.download_subtitles('zh-Hans', 1)
-        # elif resource.check_subtitles('zh-Hans', 2):
-        #     resource.download_subtitles('zh-Hans', 2)
-
-        print(resource.extract_subtitles('1.vtt'))
-
-        # print('下载封面中...')
-        # resource.getImage()
+        index = 1
+        quality_list = resource.getQualityList()
+        print('请选择清晰度')
+        for quality in quality_list:
+            print(f'{index}: {quality}p', end='  ')
+            index += 1
+        print()
+        quality = int(input())
+        if -1 < quality <= len(quality_list):
+            print('下载视频中...')
+            resource.download_video(quality_list[quality - 1])
+        else:
+            print('输入错误，请重新运行！')
+            return
+        print('下载中英文字幕中...')
+        resource.getSubtitles()
+        print('下载封面中...')
+        resource.getImage()
     elif mode == '2':
         print('请选择需要下载的内容')
         num = input('1: 视频  2: 字幕  3: 封面')
         print()
         if num == '1':
-            print('请选择视频清晰度')
             index = 1
+            quality_list = resource.getQualityList()
+            print('请选择清晰度')
             for quality in quality_list:
                 print(f'{index}: {quality}p', end='  ')
                 index += 1
             print()
             quality = int(input())
-            if -1 < quality < len(url_list):
-                video_url = url_list[quality - 1]
-                resource.getVideoOrAudio(video_url, video_suffix)
+            if -1 < quality <= len(quality_list):
+                print('下载视频中...')
+                resource.download_video(quality_list[quality - 1])
+            else:
+                print('输入错误，请重新运行！')
+                return
         elif num == '2':
-            print('请选择音频质量')
-            quality = input('1: 高质量  2: 低质量')
-            if quality == '1':
-                audio_url = url_list[-2]
-                resource.getVideoOrAudio(audio_url, audio_suffix)
-            elif quality == '2':
-                audio_url = url_list[-1]
-                resource.getVideoOrAudio(audio_url, audio_suffix)
+            print('下载中英文字幕中...')
+            resource.getSubtitles()
         elif num == '3':
-            resource.getEnglishCaption()
-        elif num == '4':
+            print('下载封面中...')
             resource.getImage()
-        elif num == '5':
-            resource.processFile()
-
     else:
-        print('输入错误！')
+        print('输入错误，请重新运行！')
+        return
 
 
 if __name__ == '__main__':
     ui()
-
-    # 下载封面 yt-dlp --write-thumbnail url
-    # 下载视频 yt-dlp url
-    # 下载字幕 yt-dlp --write-auto-subs --sub-format best --sub-lang en --skip-download url
-    # yt-dlp -o "/your/output/path/%(title)s.%(ext)s" "https://www.youtube.com/watch?v=your_video_id"
