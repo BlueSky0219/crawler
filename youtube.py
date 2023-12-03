@@ -1,4 +1,5 @@
 import os
+import re
 from yt_dlp import YoutubeDL
 
 
@@ -11,6 +12,7 @@ class DownloadYoutubeResource:
         }
 
         self.title = self.get_video_title()
+        self.title = re.sub('[/:*?"<>|\\n]', '', self.title)
         url_id = url.split('?')[1].split('=')[1].split('&')[0]
         self.image_url = f'https://i.ytimg.com/vi/{url_id}/hqdefault.jpg'
 
@@ -38,7 +40,7 @@ class DownloadYoutubeResource:
         suffer = 'en'
         if mode == 2:
             suffer = 'zh-Hans'
-        output_path = 'f:/store/resource/media/subtitles/'
+        output_path = 'F:/store/resource/media/subtitles/'
         vtt_to_srt = f'ffmpeg -i {output_path}temp.{suffer}.vtt {output_path}temp.{suffer}.srt'
         os.system(vtt_to_srt)
         old_name = f'{output_path}temp.{suffer}.srt'
@@ -130,7 +132,7 @@ class DownloadYoutubeResource:
 
     def processFile(self):
         output_path = 'f:/store/resource/media/videos/'
-        webm_to_mp4 = f'ffmpeg -i {output_path}temp.webm {output_path}temp.mp4'
+        webm_to_mp4 = f'ffmpeg -i {output_path}temp.webm -s 1920x1080 {output_path}temp.mp4'
         os.system(webm_to_mp4)
         old_name = f'{output_path}temp.mp4'
         new_name = f'{output_path}{self.title}.mp4'
@@ -161,13 +163,14 @@ def ui():
     # url = 'https://www.youtube.com/watch?v=sVPLeZ_Vpw8'
     resource = DownloadYoutubeResource(url)
     print('请选择需要下载的内容(回车默认最高清晰度完整下载)')
-    mode = input('1: 完整下载 2: 选择下载: \n')
+    mode = input('1: 完整下载 2: 选择下载\n')
     if mode == '':
         print('下载视频中...')
         resource.download_video('best')
+        print('下载封面中...')
+        resource.getImage()
         print('下载中英文字幕中...')
         resource.getSubtitles()
-        resource.getImage()
     elif mode == '1':
         index = 1
         quality_list = resource.getQualityList()
@@ -183,14 +186,13 @@ def ui():
         else:
             print('输入错误，请重新运行！')
             return
-        print('下载中英文字幕中...')
-        resource.getSubtitles()
         print('下载封面中...')
         resource.getImage()
+        print('下载中英文字幕中...')
+        resource.getSubtitles()
     elif mode == '2':
         print('请选择需要下载的内容')
-        num = input('1: 视频  2: 字幕  3: 封面')
-        print()
+        num = input('1: 视频  2: 字幕  3: 封面\n')
         if num == '1':
             index = 1
             quality_list = resource.getQualityList()
